@@ -21,9 +21,31 @@ export default function DetailsPanel({ item, seasons, episodes, season, episode,
           <div className="details-meta">{getYear(item) && <span>{getYear(item)}</span>}{getRating(item) && <span className="rating"><Star size={12} fill="currentColor" /> {getRating(item)}</span>}</div>
           <p className="overview">{item.overview || "No description is available for this title."}</p>
           {item.media_type === "tv" && <TVControls seasons={seasons} episodes={episodes} season={season} episode={episode} seasonsLoading={seasonsLoading} episodesLoading={episodesLoading} onSeasonChange={onSeasonChange} onEpisodeChange={onEpisodeChange} />}
-          <button className="button button-primary stream-action" onClick={onGetStreams} disabled={streamLoading || (item.media_type === "tv" && (!season || !episode))}>
-            {streamLoading ? <><LoaderCircle className="button-spinner" size={17} /> Finding sources...</> : <><Play size={17} fill="currentColor" /> Find streaming sources</>}
+
+          <button
+            className="button button-primary stream-action"
+            onClick={() => {
+              console.log("BUTTON CLICKED");
+              onGetStreams();
+            }}
+            disabled={
+              streamLoading ||
+              (item.media_type === "tv" && (!season || !episode))
+            }
+          >
+            {streamLoading ? (
+              <>
+                <LoaderCircle className="button-spinner" size={17} />
+                Finding sources...
+              </>
+            ) : (
+              <>
+                <Play size={17} fill="currentColor" />
+                Find streaming sources
+              </>
+            )}
           </button>
+
           {error && <p className="inline-error">{error}</p>}
           {!!sources.length && <div className="source-area"><div className="source-heading"><strong>Available sources</strong><span>{sources.length} sources</span></div><div className="source-list">{sources.map((source, i) => <button className="source-button" key={`${source.name}-${i}`} onClick={() => onPlay(source.url, source.name)}><Play size={14} fill="currentColor" /><span>{source.name || "Source"}</span><small>{source.quality || "HD"}</small></button>)}</div></div>}
         </div>
