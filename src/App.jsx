@@ -56,25 +56,89 @@ function normalize(items = []) {
   return [...map.values()];
 }
 
-function readPage() {
-  const hash = window.location.hash.replace(/^#\/?/, "");
+/* =========================================================
+   ROUTING
+========================================================= */
 
-  if (hash.startsWith("details/")) {
-    return "details";
+function readRoute() {
+  const hash = window.location.hash
+    .replace(/^#\/?/, "")
+    .replace(/\/+$/, "");
+
+  // Normal pages
+  if (PAGE_TITLES[hash]) {
+    return {
+      page: hash,
+      detail: null,
+    };
   }
 
-  return PAGE_TITLES[hash] ? hash : "home";
+  const parts = hash.split("/");
+
+  // #/movie/123
+  if (parts[0] === "movie" && parts[1]) {
+    return {
+      page: "movie-detail",
+      detail: {
+        media_type: "movie",
+        id: parts[1],
+      },
+    };
+  }
+
+  // #/tv/123
+  if (parts[0] === "tv" && parts[1]) {
+    return {
+      page: "tv-detail",
+      detail: {
+        media_type: "tv",
+        id: parts[1],
+      },
+    };
+  }
+
+  return {
+    page: "home",
+    detail: null,
+  };
 }
 
 export default function App() {
-  const [page, setPage] = useState(readPage);
+  const initialRoute = readRoute();
+
+  /* =======================================================
+     PAGE
+  ======================================================= */
+
+  const [page, setPage] = useState(
+    initialRoute.page
+  );
+
   const [query, setQuery] = useState("");
+
+  /* =======================================================
+     CONTENT
+  ======================================================= */
 
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const [selectedItem, setSelectedItem] = useState(null);
+  /* =======================================================
+     SELECTED TITLE
+  ======================================================= */
+
+  const [selectedItem, setSelectedItem] = useState(
+    initialRoute.detail
+  );
+
+  const [detailLoading, setDetailLoading] = useState(
+    Boolean(initialRoute.detail)
+  );
+
+  /* =======================================================
+     TV
+  ======================================================= */
 
   const [seasons, setSeasons] = useState([]);
   const [episodes, setEpisodes] = useState([]);
@@ -82,21 +146,45 @@ export default function App() {
   const [season, setSeason] = useState("");
   const [episode, setEpisode] = useState("");
 
-  const [seasonsLoading, setSeasonsLoading] = useState(false);
-  const [episodesLoading, setEpisodesLoading] = useState(false);
+  const [seasonsLoading, setSeasonsLoading] =
+    useState(false);
+
+  const [episodesLoading, setEpisodesLoading] =
+    useState(false);
+
+  /* =======================================================
+     STREAMING
+  ======================================================= */
 
   const [sources, setSources] = useState([]);
-  const [streamLoading, setStreamLoading] = useState(false);
-  const [streamError, setStreamError] = useState("");
+  const [streamLoading, setStreamLoading] =
+    useState(false);
+
+  const [streamError, setStreamError] =
+    useState("");
+
+  /* =======================================================
+     PLAYER
+  ======================================================= */
 
   const [player, setPlayer] = useState(null);
 
+  /* =======================================================
+     TOAST
+  ======================================================= */
+
   const [toast, setToast] = useState(null);
+
+  /* =======================================================
+     MY LIST
+  ======================================================= */
 
   const [myList, setMyList] = useState(() => {
     try {
       return JSON.parse(
-        localStorage.getItem("cinestream-my-list") || "[]"
+        localStorage.getItem(
+          "cinestream-my-list"
+        ) || "[]"
       );
     } catch {
       return [];
@@ -105,6 +193,10 @@ export default function App() {
 
   const abortRef = useRef(null);
 
+  /* =======================================================
+     SAVE MY LIST
+  ======================================================= */
+
   useEffect(() => {
     localStorage.setItem(
       "cinestream-my-list",
@@ -112,20 +204,9 @@ export default function App() {
     );
   }, [myList]);
 
-  useEffect(() => {
-    function handleHashChange() {
-      setPage(readPage());
-    }
-
-    window.addEventListener("hashchange", handleHashChange);
-
-    return () => {
-      window.removeEventListener(
-        "hashchange",
-        handleHashChange
-      );
-    };
-  }, []);
+  /* =======================================================
+     NOTIFICATION
+  ======================================================= */
 
   function notify(message, isError = false) {
     setToast({
@@ -140,40 +221,115 @@ export default function App() {
     }, 3200);
   }
 
+  /* =======================================================
+     RESET DETAIL
+  ======================================================= */
+
   function resetSelectedTitle() {
     setSelectedItem(null);
+
+    setDetailLoading(false);
+
     setSeasons([]);
     setEpisodes([]);
+
     setSeason("");
     setEpisode("");
+
     setSources([]);
     setStreamError("");
+
     setPlayer(null);
   }
 
+  /* =======================================================
+     NAVIGATION
+  ======================================================= */
+
   function navigate(nextPage) {
-    window.location.hash = `/${nextPage}`;
-    setPage(nextPage);
+    abortRef.current?.abort();
+
     resetSelectedTitle();
+
+    setError("");
+
+    window.location.hash = `/${nextPage}`;
+
+    setPage(nextPage);
   }
+
+  /* =======================================================
+     HASH CHANGE
+  ======================================================= */
+
+  useEffect(() => {
+    function handleHashChange() {
+      const route = readRoute();
+
+      setPage(route.page);
+
+      if (route.detail) {
+        setSelectedItem(route.detail);
+        setDetailLoading(true);
+
+        setSources([]);
+        setStreamError("");
+        setPlayer(null);
+
+        setSeasons([]);
+        setEpisodes([]);
+
+        setSeason("");
+        setEpisode("");
+      } else {
+        resetSelectedTitle();
+      }
+
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+    }
+
+    window.addEventListener(
+      "hashchange",
+      handleHashChange
+    );
+
+    return () => {
+      window.removeEventListener(
+        "hashchange",
+        handleHashChange
+      );
+    };
+  }, []);
+
+  /* =======================================================
+     LOAD NORMAL PAGE
+  ======================================================= */
 
   async function loadPage(target) {
     abortRef.current?.abort();
 
     const controller = new AbortController();
+
     abortRef.current = controller;
 
     setLoading(true);
     setError("");
 
-    resetSelectedTitle();
-
     try {
       let items = [];
 
+      /* MY LIST */
+
       if (target === "my-list") {
         items = myList;
-      } else if (
+      }
+
+      /* HOME / TRENDING */
+
+      else if (
         target === "home" ||
         target === "trending"
       ) {
@@ -183,7 +339,11 @@ export default function App() {
         );
 
         items = data?.results || [];
-      } else {
+      }
+
+      /* OTHER PAGES */
+
+      else {
         const responses = await Promise.all(
           GENRES.map((genre) =>
             getSuggestions(
@@ -195,19 +355,22 @@ export default function App() {
 
         items = normalize(
           responses.flatMap(
-            (response) => response?.results || []
+            (response) =>
+              response?.results || []
           )
         );
 
         if (target === "movies") {
           items = items.filter(
-            (item) => item.media_type === "movie"
+            (item) =>
+              item.media_type === "movie"
           );
         }
 
         if (target === "tv") {
           items = items.filter(
-            (item) => item.media_type === "tv"
+            (item) =>
+              item.media_type === "tv"
           );
         }
 
@@ -237,7 +400,7 @@ export default function App() {
 
         setError(
           err?.message ||
-          "Could not load this section."
+            "Could not load this section."
         );
       }
     } finally {
@@ -247,14 +410,145 @@ export default function App() {
     }
   }
 
+  /* =======================================================
+     LOAD CURRENT PAGE
+  ======================================================= */
+
   useEffect(() => {
     if (
       page !== "search" &&
-      page !== "details"
+      page !== "movie-detail" &&
+      page !== "tv-detail"
     ) {
       loadPage(page);
     }
   }, [page, myList]);
+
+  /* =======================================================
+     LOAD DETAIL PAGE
+     
+     This runs when:
+       /movie/123
+       /tv/456
+
+     is opened directly or refreshed.
+  ======================================================= */
+
+  useEffect(() => {
+    if (
+      page !== "movie-detail" &&
+      page !== "tv-detail"
+    ) {
+      return;
+    }
+
+    const route = readRoute();
+
+    if (!route.detail) {
+      return;
+    }
+
+    let active = true;
+
+    async function loadDetail() {
+      setDetailLoading(true);
+      setError("");
+
+      try {
+        const data =
+          await getMediaDetails(
+            route.detail.media_type,
+            route.detail.id
+          );
+
+        if (!active) return;
+
+        const detail = {
+          ...data,
+          id: route.detail.id,
+          media_type:
+            route.detail.media_type,
+        };
+
+        setSelectedItem(detail);
+
+        /* TV */
+
+        if (
+          route.detail.media_type ===
+          "tv"
+        ) {
+          setSeasonsLoading(true);
+
+          try {
+            const seasonData =
+              await getTVSeasons(
+                route.detail.id
+              );
+
+            if (!active) return;
+
+            const validSeasons =
+              (
+                seasonData?.seasons ||
+                []
+              ).filter(
+                (entry) =>
+                  entry.season_number !== 0
+              );
+
+            setSeasons(
+              validSeasons
+            );
+
+            if (validSeasons.length) {
+              setSeason(
+                String(
+                  validSeasons[0]
+                    .season_number
+                )
+              );
+            }
+          } catch (err) {
+            if (active) {
+              notify(
+                err?.message ||
+                  "Could not load seasons.",
+                true
+              );
+            }
+          } finally {
+            if (active) {
+              setSeasonsLoading(false);
+            }
+          }
+        }
+      } catch (err) {
+        if (!active) return;
+
+        setSelectedItem(null);
+
+        setError(
+          err?.message ||
+            "Could not load this title."
+        );
+      } finally {
+        if (active) {
+          setDetailLoading(false);
+        }
+      }
+    }
+
+    loadDetail();
+
+    return () => {
+      active = false;
+    };
+  }, [page]);
+
+  /* =======================================================
+     SEARCH
+  ======================================================= */
 
   async function handleSearch() {
     const value = query.trim();
@@ -269,10 +563,13 @@ export default function App() {
 
     abortRef.current?.abort();
 
-    const controller = new AbortController();
+    const controller =
+      new AbortController();
+
     abortRef.current = controller;
 
     setPage("search");
+
     window.location.hash = "/search";
 
     setLoading(true);
@@ -281,25 +578,31 @@ export default function App() {
     resetSelectedTitle();
 
     try {
-      const data = await searchMedia(
-        value,
-        "multi",
-        controller.signal
-      );
+      const data =
+        await searchMedia(
+          value,
+          "multi",
+          controller.signal
+        );
 
-      const filtered = (data?.results || []).filter(
-        (item) =>
-          item.media_type === "movie" ||
-          item.media_type === "tv"
-      );
+      const filtered =
+        (data?.results || []).filter(
+          (item) =>
+            item.media_type ===
+              "movie" ||
+            item.media_type === "tv"
+        );
 
-      setResults(normalize(filtered));
+      setResults(
+        normalize(filtered)
+      );
     } catch (err) {
       if (err?.name !== "AbortError") {
         setResults([]);
 
         setError(
-          err?.message || "Search failed."
+          err?.message ||
+            "Search failed."
         );
       }
     } finally {
@@ -309,30 +612,40 @@ export default function App() {
     }
   }
 
+  /* =======================================================
+     MY LIST
+  ======================================================= */
+
   function toggleMyList(item) {
     setMyList((current) => {
       const exists = current.some(
         (saved) =>
           saved.id === item.id &&
-          saved.media_type === item.media_type
+          saved.media_type ===
+            item.media_type
       );
 
       if (exists) {
         notify(
-          `${getTitle(item)} removed from My List.`
+          `${getTitle(
+            item
+          )} removed from My List.`
         );
 
         return current.filter(
           (saved) =>
             !(
               saved.id === item.id &&
-              saved.media_type === item.media_type
+              saved.media_type ===
+                item.media_type
             )
         );
       }
 
       notify(
-        `${getTitle(item)} added to My List.`
+        `${getTitle(
+          item
+        )} added to My List.`
       );
 
       return [...current, item];
@@ -343,12 +656,54 @@ export default function App() {
     return myList.some(
       (saved) =>
         saved.id === item.id &&
-        saved.media_type === item.media_type
+        saved.media_type ===
+          item.media_type
     );
   }
 
+  /* =======================================================
+     SELECT MOVIE / TV
+  ======================================================= */
+
   async function handleSelect(item) {
+    if (!item?.id) return;
+
+    const type =
+      item.media_type === "tv"
+        ? "tv"
+        : "movie";
+
+    console.log(
+      "OPENING:",
+      type,
+      item.id
+    );
+
+    /*
+      IMPORTANT:
+
+      Search:
+      #/search
+
+      Movie:
+      #/movie/123
+
+      TV:
+      #/tv/456
+    */
+
+    window.location.hash =
+      `/${type}/${item.id}`;
+
+    setPage(
+      type === "tv"
+        ? "tv-detail"
+        : "movie-detail"
+    );
+
     setSelectedItem(item);
+
+    setDetailLoading(true);
 
     setSources([]);
     setStreamError("");
@@ -360,44 +715,85 @@ export default function App() {
     setSeason("");
     setEpisode("");
 
-    window.location.hash = `/details/${item.media_type}/${item.id}`;
-    setPage("details");
-
-    if (item.media_type !== "tv") {
-      return;
-    }
-
-    setSeasonsLoading(true);
-
     try {
-      const data = await getTVSeasons(item.id);
-
-      const validSeasons =
-        (data?.seasons || []).filter(
-          (entry) => entry.season_number !== 0
+      const details =
+        await getMediaDetails(
+          type,
+          item.id
         );
 
-      setSeasons(validSeasons);
+      const completeItem = {
+        ...item,
+        ...details,
+        id: item.id,
+        media_type: type,
+      };
 
-      if (validSeasons.length > 0) {
-        setSeason(
-          String(validSeasons[0].season_number)
-        );
+      setSelectedItem(
+        completeItem
+      );
+
+      /* TV SEASONS */
+
+      if (type === "tv") {
+        setSeasonsLoading(true);
+
+        try {
+          const data =
+            await getTVSeasons(
+              item.id
+            );
+
+          const validSeasons =
+            (
+              data?.seasons ||
+              []
+            ).filter(
+              (entry) =>
+                entry.season_number !== 0
+            );
+
+          setSeasons(
+            validSeasons
+          );
+
+          if (validSeasons.length) {
+            setSeason(
+              String(
+                validSeasons[0]
+                  .season_number
+              )
+            );
+          }
+        } finally {
+          setSeasonsLoading(false);
+        }
       }
     } catch (err) {
+      console.error(
+        "DETAIL ERROR:",
+        err
+      );
+
       notify(
-        err?.message || "Could not load seasons.",
+        err?.message ||
+          "Could not load this title.",
         true
       );
     } finally {
-      setSeasonsLoading(false);
+      setDetailLoading(false);
     }
   }
+
+  /* =======================================================
+     TV EPISODES
+  ======================================================= */
 
   useEffect(() => {
     if (
       !selectedItem ||
-      selectedItem.media_type !== "tv" ||
+      selectedItem.media_type !==
+        "tv" ||
       !season
     ) {
       return;
@@ -408,30 +804,36 @@ export default function App() {
     async function loadEpisodes() {
       setEpisodesLoading(true);
 
+      setEpisodes([]);
+      setEpisode("");
+
       try {
-        const data = await getTVEpisodes(
-          selectedItem.id,
-          season
-        );
+        const data =
+          await getTVEpisodes(
+            selectedItem.id,
+            season
+          );
 
         if (!active) return;
 
-        const list = data?.episodes || [];
+        const list =
+          data?.episodes || [];
 
         setEpisodes(list);
 
-        if (list.length > 0) {
+        if (list.length) {
           setEpisode(
-            String(list[0].episode_number)
+            String(
+              list[0]
+                .episode_number
+            )
           );
-        } else {
-          setEpisode("");
         }
       } catch (err) {
         if (active) {
           notify(
             err?.message ||
-            "Could not load episodes.",
+              "Could not load episodes.",
             true
           );
         }
@@ -447,13 +849,23 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [selectedItem, season]);
+  }, [
+    selectedItem,
+    season,
+  ]);
+
+  /* =======================================================
+     GET STREAMS
+  ======================================================= */
 
   async function handleGetStreams() {
-    if (!selectedItem) return;
+    if (!selectedItem) {
+      return;
+    }
 
     if (
-      selectedItem.media_type === "tv" &&
+      selectedItem.media_type ===
+        "tv" &&
       (!season || !episode)
     ) {
       notify(
@@ -468,61 +880,109 @@ export default function App() {
     setSources([]);
 
     try {
-      const details = await getMediaDetails(
-        selectedItem.media_type,
-        selectedItem.id
-      );
+      const details =
+        await getMediaDetails(
+          selectedItem.media_type,
+          selectedItem.id
+        );
 
       const imdbId =
-        details?.external_ids?.imdb_id ||
+        details?.external_ids
+          ?.imdb_id ||
         details?.imdb_id ||
         null;
 
       const payload = {
-        tmdb_id: selectedItem.id,
-        imdb_id: imdbId,
-        media_type: selectedItem.media_type,
+        tmdb_id:
+          selectedItem.id,
+
+        imdb_id:
+          imdbId,
+
+        media_type:
+          selectedItem.media_type,
       };
 
-      if (selectedItem.media_type === "tv") {
-        payload.season = Number(season);
-        payload.episode = Number(episode);
+      if (
+        selectedItem.media_type ===
+        "tv"
+      ) {
+        payload.season =
+          Number(season);
+
+        payload.episode =
+          Number(episode);
       }
 
-      const data = await getStreams(payload);
+      console.log(
+        "STREAM PAYLOAD:",
+        payload
+      );
 
-      const streamSources = Array.isArray(
-        data?.sources
-      )
-        ? data.sources.filter(
-            (source) =>
-              source?.url &&
-              typeof source.url === "string"
-          )
-        : [];
+      const data =
+        await getStreams(
+          payload
+        );
 
-      setSources(streamSources);
+      console.log(
+        "STREAM RESPONSE:",
+        data
+      );
 
-      if (streamSources.length === 0) {
+      const streamSources =
+        Array.isArray(
+          data?.sources
+        )
+          ? data.sources.filter(
+              (source) =>
+                source?.url &&
+                typeof source.url ===
+                  "string"
+            )
+          : [];
+
+      setSources(
+        streamSources
+      );
+
+      if (
+        streamSources.length ===
+        0
+      ) {
         setStreamError(
           "No streaming sources were returned by the backend."
         );
       }
     } catch (err) {
-      console.error("STREAM ERROR:", err);
+      console.error(
+        "STREAM ERROR:",
+        err
+      );
 
       setSources([]);
 
       setStreamError(
         err?.message ||
-        "Unable to find streaming sources."
+          "Unable to find streaming sources."
       );
     } finally {
       setStreamLoading(false);
     }
   }
 
-  function handlePlay(url, sourceName) {
+  /* =======================================================
+     PLAY
+  ======================================================= */
+
+  function handlePlay(
+    url,
+    sourceName
+  ) {
+    console.log(
+      "PLAY STREAM:",
+      url
+    );
+
     if (!url) {
       notify(
         "The backend returned an empty stream URL.",
@@ -532,28 +992,53 @@ export default function App() {
     }
 
     try {
-      const parsed = new URL(
-        url,
-        window.location.origin
-      );
+      const parsed =
+        new URL(
+          url,
+          window.location.origin
+        );
 
       if (
-        parsed.protocol !== "http:" &&
-        parsed.protocol !== "https:"
+        parsed.protocol !==
+          "http:" &&
+        parsed.protocol !==
+          "https:"
       ) {
-        throw new Error("Invalid URL protocol.");
+        throw new Error(
+          "Invalid URL protocol."
+        );
       }
 
-      const title = selectedItem
-        ? getTitle(selectedItem)
-        : "Player";
+      const title =
+        selectedItem
+          ? getTitle(
+              selectedItem
+            )
+          : "Player";
 
       setPlayer({
         url: parsed.href,
-        title: `${title} · ${sourceName || "Player"}`,
+        title: `${title} · ${
+          sourceName ||
+          "Player"
+        }`,
       });
+
+      setTimeout(() => {
+        document
+          .querySelector(
+            ".player"
+          )
+          ?.scrollIntoView({
+            behavior: "smooth",
+            block: "start",
+          });
+      }, 100);
     } catch (err) {
-      console.error("PLAYER URL ERROR:", err);
+      console.error(
+        "PLAYER ERROR:",
+        err
+      );
 
       notify(
         "Invalid stream URL received from the backend.",
@@ -562,14 +1047,51 @@ export default function App() {
     }
   }
 
-  function handleBackFromDetails() {
+  /* =======================================================
+     BACK FROM DETAIL
+  ======================================================= */
+
+  function handleBack() {
     setSelectedItem(null);
+
     setSources([]);
     setStreamError("");
     setPlayer(null);
 
-    window.history.back();
+    setSeasons([]);
+    setEpisodes([]);
+
+    setSeason("");
+    setEpisode("");
+
+    setDetailLoading(false);
+
+    /*
+      If we have a search query/results,
+      return to search.
+    */
+
+    if (
+      query.trim().length >= 2 &&
+      results.length > 0
+    ) {
+      window.location.hash =
+        "/search";
+
+      setPage("search");
+
+      return;
+    }
+
+    window.location.hash =
+      "/home";
+
+    setPage("home");
   }
+
+  /* =======================================================
+     CLEAR
+  ======================================================= */
 
   function clearResults() {
     abortRef.current?.abort();
@@ -580,11 +1102,23 @@ export default function App() {
 
     resetSelectedTitle();
 
-    navigate("home");
+    window.location.hash =
+      "/home";
+
+    setPage("home");
   }
 
-  const isDetailsPage =
-    page === "details" && selectedItem;
+  /* =======================================================
+     DETAIL PAGE?
+  ======================================================= */
+
+  const isDetailPage =
+    page === "movie-detail" ||
+    page === "tv-detail";
+
+  /* =======================================================
+     RENDER
+  ======================================================= */
 
   return (
     <div className="app-shell">
@@ -593,49 +1127,33 @@ export default function App() {
         query={query}
         setQuery={setQuery}
         onSearch={handleSearch}
-        activePage={page}
+        activePage={
+          isDetailPage
+            ? ""
+            : page
+        }
         onNavigate={navigate}
       />
 
       <main className="page">
 
-        {isDetailsPage ? (
-          <>
-            <DetailsPanel
-              item={selectedItem}
-              seasons={seasons}
-              episodes={episodes}
-              season={season}
-              episode={episode}
-              seasonsLoading={seasonsLoading}
-              episodesLoading={episodesLoading}
-              streamLoading={streamLoading}
-              sources={sources}
-              error={streamError}
-              onBack={handleBackFromDetails}
-              onSeasonChange={setSeason}
-              onEpisodeChange={setEpisode}
-              onGetStreams={handleGetStreams}
-              onPlay={handlePlay}
-              onToggleList={toggleMyList}
-              isSaved={isSaved(selectedItem)}
-            />
+        {/* =================================================
+            NORMAL PAGES
+        ================================================= */}
 
-            <VideoPlayer
-              url={player?.url}
-              title={player?.title}
-              onClose={() => setPlayer(null)}
-            />
-          </>
-        ) : (
+        {!isDetailPage && (
           <>
             <Hero
               onSearchFocus={() =>
                 document
-                  .querySelector(".search-form input")
+                  .querySelector(
+                    ".search-form input"
+                  )
                   ?.focus()
               }
-              onClear={clearResults}
+              onClear={
+                clearResults
+              }
             />
 
             <section className="results-section">
@@ -648,15 +1166,19 @@ export default function App() {
                   </span>
 
                   <h2>
-                    {page === "search"
+                    {page ===
+                    "search"
                       ? `Results for “${query.trim()}”`
-                      : PAGE_TITLES[page]}
+                      : PAGE_TITLES[
+                          page
+                        ]}
                   </h2>
                 </div>
 
                 {!loading && (
                   <span className="result-count">
-                    {results.length} titles
+                    {results.length}{" "}
+                    titles
                   </span>
                 )}
 
@@ -666,20 +1188,163 @@ export default function App() {
                 items={results}
                 loading={loading}
                 error={error}
-                onSelect={handleSelect}
-                onToggleList={toggleMyList}
-                isSaved={isSaved}
+                onSelect={
+                  handleSelect
+                }
+                onToggleList={
+                  toggleMyList
+                }
+                isSaved={
+                  isSaved
+                }
               />
 
             </section>
           </>
         )}
 
+        {/* =================================================
+            DETAIL PAGE
+        ================================================= */}
+
+        {isDetailPage && (
+          <>
+            {detailLoading &&
+              !selectedItem && (
+                <div className="state-box">
+                  <strong>
+                    Loading title...
+                  </strong>
+
+                  <p>
+                    Getting title details.
+                  </p>
+                </div>
+              )}
+
+            {error &&
+              !selectedItem && (
+                <div className="state-box error-state">
+
+                  <strong>
+                    Could not load this title
+                  </strong>
+
+                  <p>
+                    {error}
+                  </p>
+
+                  <button
+                    className="button button-secondary"
+                    onClick={
+                      handleBack
+                    }
+                  >
+                    Go back
+                  </button>
+
+                </div>
+              )}
+
+            {selectedItem && (
+              <DetailsPanel
+                item={
+                  selectedItem
+                }
+
+                seasons={
+                  seasons
+                }
+
+                episodes={
+                  episodes
+                }
+
+                season={
+                  season
+                }
+
+                episode={
+                  episode
+                }
+
+                seasonsLoading={
+                  seasonsLoading
+                }
+
+                episodesLoading={
+                  episodesLoading
+                }
+
+                streamLoading={
+                  streamLoading
+                }
+
+                sources={
+                  sources
+                }
+
+                error={
+                  streamError
+                }
+
+                onBack={
+                  handleBack
+                }
+
+                onSeasonChange={
+                  setSeason
+                }
+
+                onEpisodeChange={
+                  setEpisode
+                }
+
+                onGetStreams={
+                  handleGetStreams
+                }
+
+                onPlay={
+                  handlePlay
+                }
+
+                onToggleList={
+                  toggleMyList
+                }
+
+                isSaved={
+                  isSaved(
+                    selectedItem
+                  )
+                }
+              />
+            )}
+
+            <VideoPlayer
+              url={
+                player?.url
+              }
+
+              title={
+                player?.title
+              }
+
+              onClose={() =>
+                setPlayer(null)
+              }
+            />
+          </>
+        )}
+
       </main>
 
       <Toast
-        message={toast?.message}
-        error={toast?.error}
+        message={
+          toast?.message
+        }
+        error={
+          toast?.error
+        }
       />
 
     </div>
