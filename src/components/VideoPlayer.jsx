@@ -1,29 +1,59 @@
-import { Maximize, X } from "lucide-react";
+import {
+  ArrowLeft,
+  Maximize,
+  X,
+} from "lucide-react";
 
-export default function VideoPlayer({ url, title, onClose }) {
+export default function VideoPlayer({
+  url,
+  title,
+  onClose,
+}) {
   if (!url) return null;
+
+  function fullscreen() {
+    const iframe =
+      document.querySelector(".player-frame");
+
+    if (iframe?.requestFullscreen) {
+      iframe.requestFullscreen();
+    }
+  }
 
   return (
     <section className="player">
+
       <div className="player-header">
-        <strong>{title || "Player"}</strong>
+
+        <div className="player-title">
+          <span className="player-live-dot" />
+          <strong>
+            {title || "Player"}
+          </strong>
+        </div>
+
         <div className="player-actions">
+
           <button
-            onClick={() => {
-              const iframe = document.querySelector(".player-frame");
-              iframe?.requestFullscreen?.();
-            }}
+            onClick={fullscreen}
             aria-label="Fullscreen"
           >
             <Maximize size={17} />
           </button>
-          <button onClick={onClose} aria-label="Close player">
+
+          <button
+            onClick={onClose}
+            aria-label="Close player"
+          >
             <X size={18} />
           </button>
+
         </div>
+
       </div>
 
       <div className="player-frame-wrap">
+
         <iframe
           className="player-frame"
           src={url}
@@ -32,7 +62,9 @@ export default function VideoPlayer({ url, title, onClose }) {
           allowFullScreen
           referrerPolicy="no-referrer"
         />
+
       </div>
+
     </section>
   );
 }

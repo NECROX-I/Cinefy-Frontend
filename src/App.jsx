@@ -59,34 +59,22 @@ function normalize(items = []) {
 function readPage() {
   const hash = window.location.hash.replace(/^#\/?/, "");
 
+  if (hash.startsWith("details/")) {
+    return "details";
+  }
+
   return PAGE_TITLES[hash] ? hash : "home";
 }
 
 export default function App() {
-  // =========================
-  // PAGE
-  // =========================
-
   const [page, setPage] = useState(readPage);
   const [query, setQuery] = useState("");
-
-  // =========================
-  // CONTENT
-  // =========================
 
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // =========================
-  // SELECTED TITLE
-  // =========================
-
   const [selectedItem, setSelectedItem] = useState(null);
-
-  // =========================
-  // TV
-  // =========================
 
   const [seasons, setSeasons] = useState([]);
   const [episodes, setEpisodes] = useState([]);
@@ -97,29 +85,13 @@ export default function App() {
   const [seasonsLoading, setSeasonsLoading] = useState(false);
   const [episodesLoading, setEpisodesLoading] = useState(false);
 
-  // =========================
-  // STREAMING
-  // =========================
-
   const [sources, setSources] = useState([]);
   const [streamLoading, setStreamLoading] = useState(false);
   const [streamError, setStreamError] = useState("");
 
-  // =========================
-  // PLAYER
-  // =========================
-
   const [player, setPlayer] = useState(null);
 
-  // =========================
-  // TOAST
-  // =========================
-
   const [toast, setToast] = useState(null);
-
-  // =========================
-  // MY LIST
-  // =========================
 
   const [myList, setMyList] = useState(() => {
     try {
@@ -133,20 +105,12 @@ export default function App() {
 
   const abortRef = useRef(null);
 
-  // =========================
-  // SAVE MY LIST
-  // =========================
-
   useEffect(() => {
     localStorage.setItem(
       "cinestream-my-list",
       JSON.stringify(myList)
     );
   }, [myList]);
-
-  // =========================
-  // HASH CHANGE
-  // =========================
 
   useEffect(() => {
     function handleHashChange() {
@@ -163,10 +127,6 @@ export default function App() {
     };
   }, []);
 
-  // =========================
-  // NOTIFICATION
-  // =========================
-
   function notify(message, isError = false) {
     setToast({
       message,
@@ -180,39 +140,22 @@ export default function App() {
     }, 3200);
   }
 
-  // =========================
-  // RESET SELECTED TITLE
-  // =========================
-
   function resetSelectedTitle() {
     setSelectedItem(null);
-
     setSeasons([]);
     setEpisodes([]);
-
     setSeason("");
     setEpisode("");
-
     setSources([]);
     setStreamError("");
-
     setPlayer(null);
   }
-
-  // =========================
-  // NAVIGATION
-  // =========================
 
   function navigate(nextPage) {
     window.location.hash = `/${nextPage}`;
     setPage(nextPage);
-
     resetSelectedTitle();
   }
-
-  // =========================
-  // LOAD PAGE
-  // =========================
 
   async function loadPage(target) {
     abortRef.current?.abort();
@@ -228,13 +171,9 @@ export default function App() {
     try {
       let items = [];
 
-      // MY LIST
       if (target === "my-list") {
         items = myList;
-      }
-
-      // HOME / TRENDING
-      else if (
+      } else if (
         target === "home" ||
         target === "trending"
       ) {
@@ -244,10 +183,7 @@ export default function App() {
         );
 
         items = data?.results || [];
-      }
-
-      // OTHER PAGES
-      else {
+      } else {
         const responses = await Promise.all(
           GENRES.map((genre) =>
             getSuggestions(
@@ -311,19 +247,14 @@ export default function App() {
     }
   }
 
-  // =========================
-  // LOAD CURRENT PAGE
-  // =========================
-
   useEffect(() => {
-    if (page !== "search") {
+    if (
+      page !== "search" &&
+      page !== "details"
+    ) {
       loadPage(page);
     }
   }, [page, myList]);
-
-  // =========================
-  // SEARCH
-  // =========================
 
   async function handleSearch() {
     const value = query.trim();
@@ -378,10 +309,6 @@ export default function App() {
     }
   }
 
-  // =========================
-  // MY LIST
-  // =========================
-
   function toggleMyList(item) {
     setMyList((current) => {
       const exists = current.some(
@@ -420,70 +347,52 @@ export default function App() {
     );
   }
 
-  // =========================
-  // SELECT MOVIE / TV
-  // =========================
+  async function handleSelect(item) {
+    setSelectedItem(item);
 
-async function handleSelect(item) {
-  console.log("SELECTED:", item);
+    setSources([]);
+    setStreamError("");
+    setPlayer(null);
 
-  setSelectedItem(item);
+    setSeasons([]);
+    setEpisodes([]);
 
-  setSources([]);
-  setStreamError("");
-  setPlayer(null);
+    setSeason("");
+    setEpisode("");
 
-  setSeasons([]);
-  setEpisodes([]);
+    window.location.hash = `/details/${item.media_type}/${item.id}`;
+    setPage("details");
 
-  setSeason("");
-  setEpisode("");
-
-  // Scroll to details after React renders it
-  setTimeout(() => {
-    document
-      .querySelector(".details-panel")
-      ?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-  }, 50);
-
-  // Movies don't need seasons/episodes
-  if (item.media_type !== "tv") {
-    return;
-  }
-
-  setSeasonsLoading(true);
-
-  try {
-    const data = await getTVSeasons(item.id);
-
-    const validSeasons =
-      (data?.seasons || []).filter(
-        (entry) => entry.season_number !== 0
-      );
-
-    setSeasons(validSeasons);
-
-    if (validSeasons.length > 0) {
-      setSeason(
-        String(validSeasons[0].season_number)
-      );
+    if (item.media_type !== "tv") {
+      return;
     }
-  } catch (err) {
-    notify(
-      err?.message || "Could not load seasons.",
-      true
-    );
-  } finally {
-    setSeasonsLoading(false);
-  }
-}
 
-  // =========================
-  // LOAD TV EPISODES
-  // =========================
+    setSeasonsLoading(true);
+
+    try {
+      const data = await getTVSeasons(item.id);
+
+      const validSeasons =
+        (data?.seasons || []).filter(
+          (entry) => entry.season_number !== 0
+        );
+
+      setSeasons(validSeasons);
+
+      if (validSeasons.length > 0) {
+        setSeason(
+          String(validSeasons[0].season_number)
+        );
+      }
+    } catch (err) {
+      notify(
+        err?.message || "Could not load seasons.",
+        true
+      );
+    } finally {
+      setSeasonsLoading(false);
+    }
+  }
 
   useEffect(() => {
     if (
@@ -540,16 +449,8 @@ async function handleSelect(item) {
     };
   }, [selectedItem, season]);
 
-  // =========================
-  // GET STREAMS
-  // =========================
-
   async function handleGetStreams() {
-    console.log("GET STREAMS CLICKED");
-
-    if (!selectedItem) {
-      return;
-    }
+    if (!selectedItem) return;
 
     if (
       selectedItem.media_type === "tv" &&
@@ -567,21 +468,16 @@ async function handleSelect(item) {
     setSources([]);
 
     try {
-      // Get TMDB details
       const details = await getMediaDetails(
         selectedItem.media_type,
         selectedItem.id
       );
 
-      console.log("MEDIA DETAILS:", details);
-
-      // Get IMDb ID
       const imdbId =
         details?.external_ids?.imdb_id ||
         details?.imdb_id ||
         null;
 
-      // Build backend payload
       const payload = {
         tmdb_id: selectedItem.id,
         imdb_id: imdbId,
@@ -593,28 +489,17 @@ async function handleSelect(item) {
         payload.episode = Number(episode);
       }
 
-      console.log("STREAM PAYLOAD:", payload);
-
-      // Call backend
       const data = await getStreams(payload);
 
-      console.log("STREAM RESPONSE:", data);
-
-      // Extract URLs
       const streamSources = Array.isArray(
         data?.sources
       )
         ? data.sources.filter(
-          (source) =>
-            source?.url &&
-            typeof source.url === "string"
-        )
+            (source) =>
+              source?.url &&
+              typeof source.url === "string"
+          )
         : [];
-
-      console.log(
-        "VALID SOURCES:",
-        streamSources
-      );
 
       setSources(streamSources);
 
@@ -637,13 +522,7 @@ async function handleSelect(item) {
     }
   }
 
-  // =========================
-  // PLAY STREAM
-  // =========================
-
   function handlePlay(url, sourceName) {
-    console.log("PLAY STREAM:", url);
-
     if (!url) {
       notify(
         "The backend returned an empty stream URL.",
@@ -662,9 +541,7 @@ async function handleSelect(item) {
         parsed.protocol !== "http:" &&
         parsed.protocol !== "https:"
       ) {
-        throw new Error(
-          "Invalid URL protocol."
-        );
+        throw new Error("Invalid URL protocol.");
       }
 
       const title = selectedItem
@@ -673,23 +550,10 @@ async function handleSelect(item) {
 
       setPlayer({
         url: parsed.href,
-        title: `${title} · ${sourceName || "Player"
-          }`,
+        title: `${title} · ${sourceName || "Player"}`,
       });
-
-      setTimeout(() => {
-        document
-          .querySelector(".player")
-          ?.scrollIntoView({
-            behavior: "smooth",
-            block: "start",
-          });
-      }, 100);
     } catch (err) {
-      console.error(
-        "PLAYER URL ERROR:",
-        err
-      );
+      console.error("PLAYER URL ERROR:", err);
 
       notify(
         "Invalid stream URL received from the backend.",
@@ -698,9 +562,14 @@ async function handleSelect(item) {
     }
   }
 
-  // =========================
-  // CLEAR RESULTS
-  // =========================
+  function handleBackFromDetails() {
+    setSelectedItem(null);
+    setSources([]);
+    setStreamError("");
+    setPlayer(null);
+
+    window.history.back();
+  }
 
   function clearResults() {
     abortRef.current?.abort();
@@ -714,9 +583,8 @@ async function handleSelect(item) {
     navigate("home");
   }
 
-  // =========================
-  // RENDER
-  // =========================
+  const isDetailsPage =
+    page === "details" && selectedItem;
 
   return (
     <div className="app-shell">
@@ -731,82 +599,81 @@ async function handleSelect(item) {
 
       <main className="page">
 
-        <Hero
-          onSearchFocus={() =>
-            document
-              .querySelector(".search-form input")
-              ?.focus()
-          }
-          onClear={clearResults}
-        />
+        {isDetailsPage ? (
+          <>
+            <DetailsPanel
+              item={selectedItem}
+              seasons={seasons}
+              episodes={episodes}
+              season={season}
+              episode={episode}
+              seasonsLoading={seasonsLoading}
+              episodesLoading={episodesLoading}
+              streamLoading={streamLoading}
+              sources={sources}
+              error={streamError}
+              onBack={handleBackFromDetails}
+              onSeasonChange={setSeason}
+              onEpisodeChange={setEpisode}
+              onGetStreams={handleGetStreams}
+              onPlay={handlePlay}
+              onToggleList={toggleMyList}
+              isSaved={isSaved(selectedItem)}
+            />
 
-        <section className="results-section">
+            <VideoPlayer
+              url={player?.url}
+              title={player?.title}
+              onClose={() => setPlayer(null)}
+            />
+          </>
+        ) : (
+          <>
+            <Hero
+              onSearchFocus={() =>
+                document
+                  .querySelector(".search-form input")
+                  ?.focus()
+              }
+              onClear={clearResults}
+            />
 
-          <div className="section-heading">
+            <section className="results-section">
 
-            <div>
-              <span className="section-kicker">
-                CINEFY
-              </span>
+              <div className="section-heading">
 
-              <h2>
-                {page === "search"
-                  ? `Results for “${query.trim()}”`
-                  : PAGE_TITLES[page]}
-              </h2>
-            </div>
+                <div>
+                  <span className="section-kicker">
+                    CINEFY
+                  </span>
 
-            {!loading && (
-              <span className="result-count">
-                {results.length} titles
-              </span>
-            )}
+                  <h2>
+                    {page === "search"
+                      ? `Results for “${query.trim()}”`
+                      : PAGE_TITLES[page]}
+                  </h2>
+                </div>
 
-          </div>
+                {!loading && (
+                  <span className="result-count">
+                    {results.length} titles
+                  </span>
+                )}
 
-          <MovieGrid
-            items={results}
-            loading={loading}
-            error={error}
-            onSelect={handleSelect}
-            onToggleList={toggleMyList}
-            isSaved={isSaved}
-          />
+              </div>
 
-        </section>
+              <MovieGrid
+                items={results}
+                loading={loading}
+                error={error}
+                onSelect={handleSelect}
+                onToggleList={toggleMyList}
+                isSaved={isSaved}
+              />
 
-        {selectedItem && (
-          <DetailsPanel
-            item={selectedItem}
-            seasons={seasons}
-            episodes={episodes}
-            season={season}
-            episode={episode}
-            seasonsLoading={seasonsLoading}
-            episodesLoading={episodesLoading}
-            streamLoading={streamLoading}
-            sources={sources}
-            error={streamError}
-            onBack={() => {
-              setSelectedItem(null);
-              setSources([]);
-              setStreamError("");
-              setPlayer(null);
-            }}
-            onSeasonChange={setSeason}
-            onEpisodeChange={setEpisode}
-            onGetStreams={handleGetStreams}
-            onPlay={handlePlay}
-            onToggleList={toggleMyList}
-            isSaved={isSaved(selectedItem)}
-          />
+            </section>
+          </>
         )}
-
-        <VideoPlayer
-          url={player?.url}
-          title={player?.title}
-          onClose={() => setPlayer(null)}
-        />
 
       </main>
 
