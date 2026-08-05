@@ -24,10 +24,7 @@ export default function DetailsPanel({ item, seasons, episodes, season, episode,
 
           <button
             className="button button-primary stream-action"
-            onClick={() => {
-              console.log("BUTTON CLICKED");
-              onGetStreams();
-            }}
+            onClick={onGetStreams}
             disabled={
               streamLoading ||
               (item.media_type === "tv" && (!season || !episode))
